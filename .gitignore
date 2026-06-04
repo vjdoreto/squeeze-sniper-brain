@@ -1,0 +1,13 @@
+# Repositório público de colaboração Brain × Forge
+# APENAS arquivos .md são permitidos — zero código, zero dados sensíveis
+
+# Bloquear tudo por padrão
+*
+
+# Permitir explicitamente apenas MDs e estrutura
+!*.md
+!reports/
+!reports/**
+!reports/*.md
+!.gitignore
+!.gitkeep
