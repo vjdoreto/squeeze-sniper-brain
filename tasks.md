@@ -1,5 +1,5 @@
 # Tasks — Fila Brain → Forge
-_Atualizado: 04/06/2026 · v1.4_
+_Atualizado: 05/06/2026 · v1.5_
 
 ---
 
@@ -25,6 +25,19 @@ _Atualizado: 04/06/2026 · v1.4_
 - [x] ~~Logging aborts score=0~~ — campo `signal_score` já estava correto
 - [x] ~~Throttle 49 símbolos~~ — estado desatualizado, throttle reseta a cada sessão
 - [x] ~~rsi/ema_trend/ob_imbalance zerados no score~~ — logging gap, não pipeline bug. Score usa dados corretos
+
+---
+
+## ✅ Brain EA-Sprint3 — Concluído em 05/06/2026
+
+- [x] **min_trades_1m 2 → 10** — `preferences.json` · commit `d5da930`
+- [x] **Gate combo trades_1m/oi_trend/lsr_trend** — reason_codes `trades_1m_too_low` / `oi_trend_too_weak` / `lsr_trend_not_negative` · `src/signal_engine.py` · commit `d4b01b0`
+- [x] **volume_quality no signal dict** — `cvd_change_pct / (trades_1m + 1)` sem gate · `src/signal_engine.py` · commit `3f8b6c1`
+- [x] **exp_btc_norm_1h Z-score rolling ARIA window=14** — `src/metric_engine.py` + `src/signal_engine.py` · commit `8b81a81`
+- [x] **F-10 daily_reset_window** — completo, sem alteração. Relatório 20:50 BRT está correto (antes do reset). 588 refusals confirmam janela de silêncio funcionando
+- [x] **F-11 ghost_signals.jsonl** — near-misses score≥85 com signal dict completo (22 campos incl. volume_quality, exp_btc_norm_1h) · `src/signal_engine.py` + `src/backup_session.py` · commit `b02700f`
+
+**Confirmação Forge — klines 1h BTC:** disponíveis desde o boot via `data_engine.py` L259/L342. EA-06 pode ir no Sprint 3 sem infraestrutura nova.
 
 ---
 
