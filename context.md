@@ -1173,3 +1173,21 @@ Sprint 5 encerrada com os seguintes fixes confirmados em produção:
 - Dashboard eAssets: backend FastAPI unificado operacional na porta 5001. Seção macro (Yahoo Finance) não popula no browser — bug de baixa prioridade, aguardando DevTools para diagnóstico.
 - Snapshots de dados em `aria/eAssets/dados_eassets/` — pasta local, não versionada.
 - Próxima análise ARIA: quando bot atingir 20+ trades novos (com F-12 funcional), cruzar `liq_short_1m_stable` × `mfe` para validar tese T-01.
+
+### Gate cvd_abs_negative — 10/06/2026
+
+**Commit:** `3a9e698`
+
+Gate novo adicionado após análise dos 7 trades da Sprint 5 e validação pelo Brain.
+
+**Evidência:** IDUSDT (cvd_1m=-234k, MFE=0%) e GPSUSDT (cvd_1m=-189k, MFE=0%) — ambos losers entraram com CVD absoluto profundamente negativo.
+
+**Lógica:** `volume_delta_1min < -100_000 AND liq_cascade=False` → `cvd_abs_negative` → return None
+
+**Exceção liq_cascade:** quando há cascade real, CVD negativo é ruído mecânico das liquidações forçadas batendo no bid — não pressão vendedora direcional.
+
+**Threshold -100k:** Brain recomendou -100k (não -50k proposto pelo Forge). -50k overbloqueia; os losers estavam 3x abaixo. Calibrar com 20+ trades — se nenhum winner entrar entre -50k e -100k, baixar para -75k.
+
+**Complementa** (não substitui) o gate `cvd_not_confirming` existente (percentual).
+
+**Trailing stop:** Brain recomendou aguardar 15+ saídas por trailing antes de qualquer ajuste no callback 0.75%. Monitorar `exp_btc:1h` no momento da saída — se "saiu cedo" sistematicamente com exp_btc:1h > 30, o problema é rally de múltiplas pernas, não o callback.
