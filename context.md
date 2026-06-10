@@ -1191,3 +1191,22 @@ Gate novo adicionado após análise dos 7 trades da Sprint 5 e validação pelo 
 **Complementa** (não substitui) o gate `cvd_not_confirming` existente (percentual).
 
 **Trailing stop:** Brain recomendou aguardar 15+ saídas por trailing antes de qualquer ajuste no callback 0.75%. Monitorar `exp_btc:1h` no momento da saída — se "saiu cedo" sistematicamente com exp_btc:1h > 30, o problema é rally de múltiplas pernas, não o callback.
+
+### Análise ARIA — Snapshot 10/06/2026 07:56 UTC (531 símbolos)
+
+**Contexto macro:** Mercado bearish estrutural — 78% dos símbolos com EMA:4h ≤ -4, apenas 8% em tendência bull, RSI:1h médio=46.4, só 33% das altcoins desacoplando do BTC.
+
+**Gate ema_4h_bearish validado:** filtrando 111/135 (82%) dos candidatos que passariam o gate combo. Correto — sem ele o bot entraria em WLFIUSDT/HIVEUSDT/XMRUSDT com estrutura 4h destroçada.
+
+**Top candidatos identificados pela ARIA:**
+
+| Símbolo | EMA:4h | EXP:1h | EXP:15m | EXP:5m | RSI:1h | Observação |
+|---------|--------|--------|---------|--------|--------|-----------|
+| STGUSDT | +6 | +121.5 | +62.8 | +34.9 | 76 | Movimento já em andamento — não entrar |
+| 龙虾USDT | +6 | +22.4 | +24.6 | +21.4 | 67 | ??USDT da análise ARIA — símbolo chinês, setup fresco |
+| KASUSDT | +4 | +9.0 | +10.2 | +6.6 | 65 | Força consistente, 2ª aparição |
+| BTWUSDT | +3 | +86.4 | +8.3 | -4.8 | 56 | Divergência temporal — aguardar 5m virar |
+
+**Decisões ARIA → Forge:**
+- `min_cvd_change_pct_no_cascade` 1.0 → 1.5: ARIA sugeriu, Brain ainda não validou — congelado
+- Trailing stop: ARIA confirma Brain — aguardar T-01/T-02 com 20+ trades
