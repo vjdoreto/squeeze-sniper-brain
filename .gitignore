@@ -4,16 +4,9 @@
 # Bloquear tudo por padrão
 *
 
-# Permitir explicitamente apenas MDs e estrutura de pastas
+# Permitir traversal de diretórios (sem isso o git não encontra .md em subpastas)
+!*/
+
+# Permitir apenas arquivos .md e .gitignore
 !*.md
-!reports/
-!reports/**
-!reports/*.md
-!brain/
-!brain/**
-!aria/
-!aria/**
-!docs/
-!docs/**
 !.gitignore
-!.gitkeep
