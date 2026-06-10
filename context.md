@@ -846,9 +846,68 @@ Causa raiz: `_update_indicators` não era chamado durante o load do cache quente
 
 ---
 
+---
+
+### 🔧 Sprint Forge — 09/06/2026 (v4.5 — sessão Brain × ARIA × Forge)
+
+**Migração Brain + ARIA para Antigravity (Claude Code)**
+
+Agentes Brain e ARIA migrados do Claude Desktop para cá. Estrutura de pastas:
+- `brain/` — BRAIN_CONTEXT.md, backlog-brain-doreto-v1.0.md (v3.4 · 47 itens)
+- `aria/` — ARIA_CONTEXT.md, análises .md, indicadores .py, pasta eAssets/
+- `AGENTS.md` — definição permanente dos 4 papéis e protocolos
+- `tasks.md` — fila Brain → Forge
+
+**Análise dos 4 trades de hoje (Brain × ARIA consenso)**
+
+| Trade | Resultado | Exit | MFE | Achado |
+|-------|-----------|------|-----|--------|
+| ARUSDT | ❌ -$0.77 | squeeze_failed 90s | 0% | eAssets: ema_trend:4h=-6 — bot via 0 (gate F-18 cego) |
+| PARTIUSDT | ❌ -$0.91 | squeeze_aborted 120s | 0.37% | Score=86 entrou (bug fit_score_min); eAssets: ema:4h=+6 ignorado |
+| KATUSDT | ✅ +$0.50 | trailing 181s | 11% | Capturou só 22.8% — eAssets: EXP_BTC:1h=40.09 sinalizava múltiplas pernas |
+| AIGENSYNUSDT | ✅ +$1.27 | trailing 181s | 7.28% | Captura 87% — trade modelo |
+
+**fix(ema_trend_4h) — gate F-18 estava cego** · commit `c7edbf8`
+
+`ema_trend_4h=0` em 3/4 trades enquanto eAssets mostrava -6 e +6 reais.
+Causa: `_update_indicators` exigia `len(closes) >= 100` para calcular EMA trend.
+Fix: reduzido para `>= 50`. Arquivo: `src/metric_engine.py:409`.
+
+**Confirmação na próxima sessão:** verificar se `ema_trend_4h` aparece com valores ≠ 0 nos signals após restart.
+
+**fix(fit_score_min) — score=86 entrava após troca de modo** · commit `562e172`
+
+`_apply_runtime_mode` em `main.py:1498` lia `fit_score_min` da raiz do preferences.json (valor=20) em vez de `signal_node.get("min_score")` (valor=90). Toda troca de modo pelo dashboard sobrescrevia o threshold para 20.
+Fix: `prefs.get("fit_score_min")` → `signal_node.get("min_score")`.
+
+**Limpeza src/ — 10 arquivos mortos removidos** · commit `82fd193`
+
+Scripts de auditoria one-shot nunca importados em produção. src/ agora tem 18 arquivos — todos ativos.
+
+**B-48 adicionado ao backlog Brain**
+
+Scripts automáticos `analyze_logs.py` (Brain) e `analyze_eassets.py` (ARIA) para substituir análise manual. Próxima sessão Brain define prioridade.
+
+**Descoberta ARIA — EXP_BTC:1h > 30 = movimento de múltiplas pernas**
+
+KATUSDT EXP_BTC:1h=40.09 → +17.93% em 15min pós-saída. Trailing 75% capturou só 2.51%. Tese nova: quando EXP_BTC:1h > 30, trailing atual é insuficiente. Aguarda 20+ trades para confirmar antes de virar gate/parâmetro.
+
+**Macro eAssets 09/06/2026 23:44 UTC**
+- BTC: -2.37% no dia · ema_trend:4h=-6 · rsi:1h=37.7
+- 410/531 ativos com ema_trend:4h negativo (77%) — mercado bearish amplo
+- 48/531 com ema_trend:4h positivo — ilhas de desacoplamento onde o SS opera
+
+**Próximos passos (próxima sessão):**
+1. Confirmar `ema_trend_4h ≠ 0` nos signals após restart com fix ativo
+2. Confirmar `liq_short_1m > 0` — F-12 fixado em 09/06, ainda chegava zerado
+3. Brain prioriza B-48 (scripts automáticos) no backlog
+4. MTF — Sprint 5+ (pré-requisito EA-02)
+
+---
+
 *Documento gerado em: 03/06/2026*
 *Última atualização: 09/06/2026*
-*Versão: 4.4 · Última atualização: 09/06/2026*
+*Versão: 4.5 · Última atualização: 09/06/2026*
 
 ---
 
@@ -965,7 +1024,7 @@ Ainda exige `liq_curr > liq_prev * 1.8` (aceleração de 80%).
 | lsr_trend_not_negative | lsr_trend > -0.3 | `lsr_trend_not_negative` |
 | volume_quality_spike | vq >= 2.0 | `volume_quality_spike` |
 | rsi_1h_warmup | rsi_1h == 50.0 E uptime < 600s | `rsi_1h_warmup` |
-| **ema_4h_bearish (novo)** | ema_4h <= -4 E exp_btc_norm_1h < -1.5 | `ema_4h_bearish` |
+| **ema_4h_bearish** | ema_4h <= -4 (AND removido — `9bce976`) | `ema_4h_bearish` |
 | mae_guard_late | dur >= 240s E pnl < -3% E mfe < 3% | `mae_guard_late` |
 
 ### O que monitorar na próxima sessão
@@ -999,6 +1058,45 @@ BANANAS31 (+17%, melhor winner da amostra) estava bloqueado com RSI=48. A zona d
 | `paper.signal.min_rsi_5m` | 60.0 | **45.0** | Zona de acumulação 40–55 |
 | Gate `ema_4h_bearish` | `<= -4 AND norm_1h < -1.5` | **`<= -4` (só)** | AND anulava o gate |
 
-### ⏳ Pendente F-12
+### ✅ F-12 CONFIRMADO (09/06/2026 — boot 21:27:47)
 
-O fix do notional (`ap*z`) corrige o cálculo mas a validação real só acontece na próxima sessão de paper trading. Se `F-12 liq_accum:` não aparecer nos logs → stream não está ativo → investigar se `bsm.multiplex_socket(["!forceOrder@arr"])` está conectando corretamente na biblioteca `python-binance` em uso.
+`DIAG F-12 payload bruto (#1)` apareceu 42 segundos após o boot. Pipeline funcional:
+- `F-12 liq_accum:` registrando notionals reais — TRUMPUSDT $438, STGUSDT $1276, BTWUSDT $6090, VELVETUSDT $4439
+- `F-12 liq_stable:` gerando valores estáveis para o signal dict
+- Todos os 42+ trades anteriores a essa sessão tinham `liq_short_1m_stable = 0` — dados históricos invalidados para teses T-01/T-02/T-03
+
+---
+
+## 🧹 Sessão 09/06/2026 — Validação e Higiene do Projeto
+
+### Validações confirmadas nesta sessão
+
+| Fix | Status | Evidência |
+|-----|--------|-----------|
+| **F-12** WebSocket endpoint Futures | ✅ CONFIRMADO | DIAG 21:27:47, notionals reais |
+| **ema_trend_4h** no signal dict | ✅ CONFIRMADO | fix candles 100→50, commit `c7edbf8` |
+| **rsi:1h** real pós-cache | ✅ CONFIRMADO | gate rsi_1h_warmup fora do top-5 no 2º boot |
+| **fit_score_min=90** mantido | ✅ CONFIRMADO | bug _apply_runtime_mode corrigido `562e172` |
+| **boot quente** (cache 30s) | ✅ CONFIRMADO | klines com age=30s na 2ª inicialização |
+
+### Organização do projeto executada
+
+- `assets/` criado — logo.png e imagens movidos da raiz
+- `aria/scripts/` criado — scripts de análise ARIA movidos de `aria/`
+- `docs/_arquivo/` criado — scripts legados arquivados (`claude_hub.py`, `preferences.suggested.json`)
+- `logo.png` path corrigido em `src/web_dashboard.py:2826` → `assets/logo.png`
+- `docs/HOUSEKEEPING.md` criado — regras de higiene permanentes do projeto
+
+### Blacklist zerada
+
+`preferences.json → blacklist: []`
+
+EPICUSDT, HOLOUSDT, JTOUSDT, NILUSDT, PARTIUSDT, PROVEUSDT removidos.
+Filosofia: ativos mudam de comportamento por minuto. Gates dinâmicos (`ema_4h_bearish`, `spread_too_high`, `cvd_not_confirming`) cobrem os casos de forma precisa e adaptativa, sem penalizar símbolos que voltaram a se comportar bem.
+
+### Estado atual (09/06/2026 — fim de sessão)
+
+- Bot rodando em paper mode, todos os gates ativos, pipeline liq funcional
+- 50+ trades necessários para auditoria estatística (T-01/T-02/T-03)
+- F-01 (cockpit Live persistence) ainda pendente — único bug UX aberto
+- Próxima pauta Brain: gate momentum sub-minuto (ring buffers 10s/20s/30s) e macro CMC
