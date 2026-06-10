@@ -1117,3 +1117,11 @@ CRM, GRM e BTC Reset agora calculados de verdade pelos módulos Python (`scripts
 Yahoo Finance: `allorigins.win` removido — servidor busca direto (sem CORS).
 **Pendente (baixa prioridade):** seção macro do dashboard HTML não popula no browser — debug via DevTools pendente.
 ARIA ciente do estado técnico (ARIA_CONTEXT.md v1.2 seção 6).
+
+### Acesso remoto via Tailscale — 10/06/2026
+
+Dashboard acessível pelo celular via Tailscale.
+- `preferences.json → dashboard.host: "0.0.0.0"` · commit `e89f676`
+- Firewall Windows: porta 8765 aberta (regra "SqueezeSniper Dashboard Tailscale")
+- IP Tailscale do laptop: `100.71.78.107`
+- URL celular: `http://100.71.78.107:8765` (Tailscale ativo no celular)
