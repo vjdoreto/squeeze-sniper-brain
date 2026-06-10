@@ -1,5 +1,5 @@
 # Tasks — Fila Brain → Forge
-_Atualizado: 10/06/2026 · v2.1_
+_Atualizado: 10/06/2026 · v2.2_
 
 ---
 
@@ -70,6 +70,14 @@ _Atualizado: 10/06/2026 · v2.1_
 - [x] **Análise eAssets 10/06 01:48 UTC** — top setups: JCTUSDT (EXP1h=74, LSR=-12), ZBTUSDT, AGTUSDT, BEATUSDT; BTWUSDT +20% já havia subido (LSR=+18, tarde demais)
 - [x] **gitignore brain repo corrigido** — `!aria/**` deixava passar .py/.html; novo padrão `!*/` + `!*.md` (apenas markdowns) · `abfd81d`
 - [x] **eAssets dashboard** — pausado; debug macro HTML pendente (baixa prioridade, DevTools necessário)
+
+## ✅ Fix Reset Paper + Hard Reset — Concluído (10/06/2026)
+
+- [x] **DrawdownManager.reset()** — zera `consecutive_losses`, `risk_multiplier`, `trading_paused`, deleta `logs/risk_state.json` · `src/risk_manager.py` · `1a4d591`
+- [x] **SymbolThrottler.reset()** — zera `symbol_history`, deleta `logs/throttle_state.json` · `src/risk_manager.py` · `1a4d591`
+- [x] **symbol_throttler movido para main()** — estava dentro de `trading_loop()`, inacessível aos closures de reset · `main.py` · `1a4d591`
+- [x] **_on_hard_reset** — chama `risk_manager.reset()` + `symbol_throttler.reset()` · `main.py:2194`
+- [x] **_on_reset_paper** — chama `risk_manager.reset()` + `symbol_throttler.reset()` · `main.py:2039`
 
 ## 🔴 Sprint 5 — Em andamento (objetivo: 50+ trades válidos)
 

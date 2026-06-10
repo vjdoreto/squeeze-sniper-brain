@@ -1117,3 +1117,19 @@ CRM, GRM e BTC Reset agora calculados de verdade pelos módulos Python (`scripts
 Yahoo Finance: `allorigins.win` removido — servidor busca direto (sem CORS).
 **Pendente (baixa prioridade):** seção macro do dashboard HTML não popula no browser — debug via DevTools pendente.
 ARIA ciente do estado técnico (ARIA_CONTEXT.md v1.2 seção 6).
+
+### Fix Reset Paper + Hard Reset — 10/06/2026
+
+**Commits:** `src/risk_manager.py` + `main.py` · `1a4d591`
+
+Ambos os botões de reset do dashboard estavam incompletos — não limpavam `risk_state.json` nem `throttle_state.json`.
+
+**Problema:** Após Hard Reset, o `DrawdownManager` mantinha `consecutive_losses` e `trading_paused` do estado anterior, e o `SymbolThrottler` mantinha cooldowns ativos — bloqueando símbolos sem motivo após um reset.
+
+**Solução em 3 partes:**
+1. `DrawdownManager.reset()` — zera `consecutive_losses`, `risk_multiplier`, `trading_paused`, deleta `logs/risk_state.json`
+2. `SymbolThrottler.reset()` — zera `symbol_history`, deleta `logs/throttle_state.json`
+3. `symbol_throttler` movido de dentro de `trading_loop()` para escopo de `main()` — necessário para os closures `_on_hard_reset` e `_on_reset_paper` acessarem o objeto
+4. Ambos `_on_hard_reset` e `_on_reset_paper` agora chamam `risk_manager.reset()` + `symbol_throttler.reset()`
+
+**Estado atual pós-fix:** Hard Reset e Reset Paper limpam estado completo. Bot precisa de restart para carregar mudança (bot estava rodando com versão anterior).
