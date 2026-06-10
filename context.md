@@ -1133,3 +1133,43 @@ Ambos os botões de reset do dashboard estavam incompletos — não limpavam `ri
 4. Ambos `_on_hard_reset` e `_on_reset_paper` agora chamam `risk_manager.reset()` + `symbol_throttler.reset()`
 
 **Estado atual pós-fix:** Hard Reset e Reset Paper limpam estado completo. Bot precisa de restart para carregar mudança (bot estava rodando com versão anterior).
+
+### Boot confirmado com todos os fixes ativos — 10/06/2026 (05:24 BRT)
+
+Restart pós-fix executado. Checklist de saúde:
+
+| Indicador | Status |
+|-----------|--------|
+| `Bootstrap 4h: 481 simbolos sem dados suficientes...` | ✅ `_fetch_4h_klines_all` iniciou |
+| `Boot quente! Cache carregado (idade: 116s)` | ✅ klines 5m/1h preservadas |
+| `DIAG F-12 payload bruto (#1)` em 26s | ✅ pipeline liquidação funcional |
+| `F-12 liq_accum: GUAUSDT +935.47` | ✅ acumulação registrando |
+| Hard Reset e Reset Paper | ✅ limpam risk_state + throttle_state (fix `1a4d591`) |
+
+**Estado atual:** bot rodando com todos os fixes da Sprint 5 ativos. Aguardando `✅ Bootstrap 4h concluido. Ainda sem dados: 0 simbolos.` para confirmar gate F-18 cobrindo 100% dos símbolos.
+
+---
+
+## 📋 Briefing Brain × ARIA — Pós Sprint 5 (10/06/2026)
+
+### Para o Brain (Estratégia)
+
+Sprint 5 encerrada com os seguintes fixes confirmados em produção:
+
+| Fix | Impacto |
+|-----|---------|
+| F-18 gate ema_4h_bearish | Cego para 87% dos símbolos → corrigido. Bootstrap 4h para todos os 481 símbolos via task dedicada (semáforo 3, sem rate-limit) |
+| min_score 90 → 85 | Zero trades em 6h → corrigido. Score máximo real era 88 |
+| Hard Reset + Reset Paper | Cooldowns e consecutive_losses fantasmas após reset → corrigido |
+| F-12 liq_accum | Confirmado funcional (notionals reais desde boot de 09/06) |
+
+**Pendências para Brain avaliar:**
+1. **Gate CVD absoluto negativo** — ambos os losers da amostra (IDUSDT, GPSUSDT) entraram com CVD_1m < -200k e MFE=0%. Proposta: bloquear entrada quando `cvd_1m < -50000` e `liq_cascade=False`. Brain deve confirmar threshold e lógica antes do Forge implementar.
+2. **Trailing stop callback 0.75%** — AVNTUSDT subiu +5.46% e HIVEUSDT +3.66% após saída. Possível ajuste para 0.5% ou trailing adaptativo por volatilidade. Brain deve avaliar com mais trades.
+3. **Objetivo imediato:** coletar 50+ trades com todos os fixes ativos para validação estatística das teses T-01/T-02/T-03.
+
+### Para a ARIA (eAssets)
+
+- Dashboard eAssets: backend FastAPI unificado operacional na porta 5001. Seção macro (Yahoo Finance) não popula no browser — bug de baixa prioridade, aguardando DevTools para diagnóstico.
+- Snapshots de dados em `aria/eAssets/dados_eassets/` — pasta local, não versionada.
+- Próxima análise ARIA: quando bot atingir 20+ trades novos (com F-12 funcional), cruzar `liq_short_1m_stable` × `mfe` para validar tese T-01.
