@@ -1,7 +1,7 @@
 # BRAIN_CONTEXT.md — Squeeze Sniper
 > Contexto estratégico para o agente Brain retomar no Claude Code (Antigravity).
 > Forge é guardião deste arquivo — atualiza a cada sprint.
-> Versão: 1.0 · 09/06/2026
+> Versão: 1.1 · 10/06/2026
 
 ---
 
@@ -19,7 +19,7 @@ Bot de trading algorítmico LONG ONLY em Binance Futures USDM que captura **long
 | Capital simulado | $1.000 USDT |
 | Leverage | 10× |
 | Posições máximas | 20 simultâneas |
-| Score mínimo entrada | 90/100 |
+| Score mínimo entrada | **85/100** (reduzido 10/06) |
 | Exchange | Binance Futures USDM |
 | Repositório privado | `vjdoreto/squeeze-sniper` |
 | Repositório público (Brain) | `vjdoreto/squeeze-sniper-brain` |
@@ -35,6 +35,7 @@ Bot de trading algorítmico LONG ONLY em Binance Futures USDM que captura **long
 - **EMA:4h ≥ 0** = macro favorável → winners majoritários nessa condição
 - **RSI:5m entre 40–55** = zona de ignição (BANANAS31 +17% com RSI=48 — bloqueado erroneamente até 09/06)
 - **Trades:1m ≥ 10 + OI trend ≥ 0.008 + LSR trend ≤ -0.3** = gate combo EA-Sprint3 discrimina bem
+- **lsr_trend_positive com liq>$20k + trades≥15 + cvd>2.0** = padrão B-34 demand breakout — bypass ativo desde 10/06
 
 ### ❌ Padrões de losers confirmados
 - **EMA:4h ≤ -4** = macro bearish → WAXPUSDT EMA:4h=-6 entrou e saiu -16.93%
@@ -54,6 +55,12 @@ Bot de trading algorítmico LONG ONLY em Binance Futures USDM que captura **long
 | ema_4h_bearish AND removido | WAXPUSDT norm_1h=+1.378 → gate nunca disparou | 09/06 |
 | liq_threshold proporcional ao OI | threshold fixo $500k impossível p/ altcoins $3-5M OI | 08/06 |
 | futures_multiplex_socket | F-12 causa raiz: stream spot nunca entregava eventos | 09/06 |
+| **min_score 90→85** | Score max=88; 25.307 rejeições; 0 trades em 6h. KATUSDT 17× bloqueado | 10/06 |
+| **B-liq-cascade-tiers** | 0.02×OI → floor $100k p/ OI $5M → cascade impossível. Tiers por OI desbloqueiam | 10/06 |
+| **B-34-bypass** | VELVETUSDT $69k liq bloqueado pelo gate lsr_trend_positive antes do score | 10/06 |
+| **ema_trend:1h +5 pts bônus** | BEAT 4h=+6/1h=+6/5m=0 invisível ao score anterior — pullback em tendência | 10/06 |
+| **Bug simétrico F-12: klines + CVD vinham do Spot** | `_listen_klines` e `_listen_agg_trades` usavam `multiplex_socket` (Spot) — bug idêntico ao F-12. CVD e RSI de todos os trades anteriores ao restart são inválidos | 10/06 |
+| **queue_size=10000 + max_queue_size** | Overflow silencioso em spikes de volume — parâmetro correto da biblioteca | 10/06 |
 
 ---
 
@@ -73,10 +80,19 @@ Veja `SQUEEZE_SNIPER_DNA.md` para lista completa. Destaques críticos:
 ## 6. O Que Está Pendente de Validação
 
 ### Alta prioridade — aguardando primeiros trades com sistema limpo
-- [ ] `liq_short_1m_stable` e `liq_cascade` com dados reais (F-12 corrigido em 09/06 — era endpoint Spot, corrigido para Futures)
-- [ ] `ema_trend_4h` no signal dict (corrigido 09/06 — não estava sendo exportado)
-- [ ] `rsi:1h` real pós-cache quente (corrigido 09/06 — não recalculava após load)
-- [ ] Gate `ema_4h_bearish` disparando de fato em losers (auditar via `signal_refusals.jsonl`)
+- [x] `liq_short_1m_stable` e `liq_cascade` com dados reais — **CONFIRMADO 09/06 21:27:47** (TRUMPUSDT $438, BTWUSDT $6090 — pipeline funcional)
+- [x] `ema_trend_4h` no signal dict — **CONFIRMADO 09/06** (fix candles 100→50, commit `c7edbf8`)
+- [x] `rsi:1h` real pós-cache quente — **CONFIRMADO 09/06** (gate rsi_1h_warmup não aparece no top-5 após 2º boot)
+- [x] **CVD e klines de Futuros** — **CONFIRMADO 10/06** (`fde21af`). Bug simétrico ao F-12 corrigido: `_listen_klines` + `_listen_agg_trades` agora usam `futures_multiplex_socket`. Todos os trades anteriores a essa sessão têm CVD e RSI calculados com dados do Spot — histórico invalidado para T-01/T-02/T-03.
+- [ ] Gate `ema_4h_bearish` disparando de fato em losers (auditar via `signal_refusals.jsonl` — aguarda 50+ trades)
+- [ ] `liq_cascade` (boolean) gerando entradas de qualidade — aguarda amostras com liq_short_1m ativo
+- [ ] **B-34-bypass WR** — após 20+ trades com `lsr_bypass_active=True`, Brain audita WR. WR < 50% → reverter bypass (`519b56d`)
+- [ ] **T-05 range_level × MFE** — backlog pós-50 trades. Hipótese: range_level:1h ≥ 3 + entrada = MFE médio 1.5× maior
+- [ ] **T-06 FR × MFE** — FR > +0.001 em ativo com ema_trend:4h ≥ 0 + OI crescendo = squeeze iminente. Validar em 30+ trades com `funding_rate` nos logs
+
+### Teses novas registradas (10/06/2026 · ARIA)
+- **T-05:** range_level:1h ≥ 4 + ema_trend:4h ≥ 0 + exp_btc:1h > 5 → squeeze com MFE mais alto (energia represada). Campo range_level não está no pipeline SS hoje — backlog pós-50 trades.
+- **T-06:** FR > +0.001 em ativo com ema_trend:4h ≥ 0 + OI crescendo = curto-circuito de short squeeze iminente. `funding_rate` já está no signal dict via `market_view.py:266` — ARIA pode auditar imediatamente nos próximos trades.
 
 ### Backlog estratégico (Brain define prioridade)
 - [ ] **Gate momentum sub-minuto** — ring buffers 10s/20s/30s AggTrade
@@ -100,4 +116,4 @@ Veja `SQUEEZE_SNIPER_DNA.md` para lista completa. Destaques críticos:
 
 ---
 
-*BRAIN_CONTEXT.md v1.0 · Forge é guardião · 09/06/2026*
+*BRAIN_CONTEXT.md v1.2 · Forge é guardião · 10/06/2026 — bug simétrico F-12 corrigido (CVD/klines Spot→Futuros), queue overflow corrigido, listener raw criado*

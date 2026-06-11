@@ -28,6 +28,7 @@ ARIA não implementa nada — entrega descobertas estruturadas ao Brain, que rep
 | `rsi_1h` | signal dict | Momentum de médio prazo |
 | `rsi_5m` | signal dict | Combustível técnico da squeeze |
 | `liq_short_1m` | signal dict | Liquidações reais no minuto (dados reais só a partir de 09/06) |
+| `cvd_change_pct` | signal dict | CVD de Futuros reais (dados reais só a partir de 10/06 — antes vinha do Spot) |
 | `liq_cascade` | signal dict | Confirmação de colapso institucional |
 | `volume_quality` | signal dict | cvd_change_pct/(trades_1m+1) — qualidade vs quantidade |
 | `exp_btc_norm_1h` | signal dict | Z-score normalizado (window=14) força vs BTC |
@@ -64,10 +65,16 @@ ARUSDT: EXP_BTC:1m=-2.47 (fraco) mas EXP_BTC:1h=+42 (fortíssimo) → bot entrou
 
 ## 4. Teses Abertas — Aguardando Dados
 
+### ⚠️ Nota crítica de validade de dados (10/06/2026)
+
+Todos os trades coletados **antes do restart pós-`fde21af`** têm CVD e klines calculados com dados do **Spot** (não Futuros). Bug simétrico ao F-12, corrigido em `fde21af`. Os dados históricos de `paper_closed.jsonl` anteriores a essa data são inválidos para qualquer análise que envolva `cvd_change_pct`, `ema_trend`, `rsi_*`. As teses T-01 a T-04 só podem ser validadas com trades coletados a partir da sessão pós-fix.
+
+---
+
 ### T-01: liq_cascade como discriminador principal
 **Hipótese:** trades com `liq_cascade = True` têm MFE e PnL significativamente maiores que os sem cascade.
 **Status:** 🟢 DESBLOQUEADA — pipeline funcional desde 09/06 21:27:47 (TRUMPUSDT $438, BTWUSDT $6090 confirmados)
-**Próximo passo:** analisar primeiros 20+ trades com `liq_short_1m > 0` — distribuição por exit_reason e MFE.
+**Próximo passo:** analisar primeiros 20+ trades com `liq_short_1m > 0` — distribuição por exit_reason e MFE. Usar apenas trades pós-`fde21af`.
 
 ### T-02: ema_trend_4h como filtro de qualidade
 **Hipótese:** trades com `ema_trend_4h ≥ 0` têm win rate > 70%; com `ema_trend_4h ≤ -2` win rate < 40%.
@@ -83,6 +90,17 @@ ARUSDT: EXP_BTC:1m=-2.47 (fraco) mas EXP_BTC:1h=+42 (fortíssimo) → bot entrou
 **Hipótese:** Z-score > +1.0 = ativo quente acima da média histórica = squeeze com mais momentum.
 **Campo:** `exp_btc_norm_1h` (Z-score rolling window=14 de exp_btc:5m)
 **Próximo passo:** cruzar com MFE nos primeiros 30 trades da nova sessão.
+
+### T-05: range_level:1h × MFE (nova · 10/06/2026)
+**Hipótese:** ativos com `range_level:1h ≥ 4` + `ema_trend:4h ≥ 0` + `exp_btc:1h > 5` têm MFE médio 1.5× maior — energia represada antes da explosão resulta em movimentos mais violentos e limpos.
+**Status:** 🔴 BLOQUEADA — `range_level:1h` não está no pipeline SS hoje (campo só no eAssets). Backlog pós-50 trades.
+**Evidência eAssets 10/06:** PARTIUSDT (range:1h=5, EXP:1h=16.6), MANTAUSDT (range:1h=5, EXP:1h=15.2) — estrutura mais limpa do snapshot.
+
+### T-06: Funding Rate como catalisador de squeeze (nova · 10/06/2026)
+**Hipótese:** FR > +0.001 em ativo com `ema_trend:4h ≥ 0` + OI crescendo = curto-circuito de short squeeze iminente (shorts pagando para manter posição → pressão crescente para fechar).
+**Status:** 🟢 DESBLOQUEADA — `funding_rate` já está no signal dict via `market_view.py:266`. ARIA pode auditar imediatamente.
+**Evidência eAssets 10/06:** BEATUSDT FR=+0.0029 (shorts pagando 0.29%/8h = 2.9%/período em 10×) com estrutura 4h/1h fortíssima. STGUSDT FR=-0.001 (shorts pagando mesmo com ativo subindo).
+**Próximo passo:** nos primeiros 30+ trades, cruzar `funding_rate` × `MFE` × `exit_reason`. Regra empírica: FR > +0.0015 + EMA:4h=+6 + OI crescendo → MFE médio mais alto.
 
 ---
 
@@ -132,4 +150,18 @@ Aguarda validação estatística dos 50+ trades do SS antes de implementar.
 
 ---
 
-*ARIA_CONTEXT.md v1.2 · Forge é guardião · 09/06/2026 — T-01/T-02/T-03 desbloqueadas + eAssets backend v2.0*
+## 7. Snapshot eAssets — 10/06/2026 · 23:12 UTC
+
+**Macro:** BTC $61.173 | EMA:4h=-6 (79.1% dos 531 ativos bearish) | RSI:1h=40.3 | OI_trend=-3.48 | LSR=2.08 crescendo
+
+**Ilhas de desacoplamento:** apenas 28/531 ativos com EMA:4h=+6 — universo exato onde o SS opera.
+
+**Tier 1 — Anomalias ativas:**
+- **VELVETUSDT** +111.45% 1D · EXP_BTC:1h=276 · LSR_trend=-16.31 · alinhamento EMA total. Movimento em perna avançada — monitorar pullback.
+- **BEATUSDT** +49.70% 1D · EXP_BTC:1h=130 · FR=+0.0029 (extremo) · LSR_trend=+7.04 · 5m/1m negativos (pullback ativo). Padrão pré-squeeze reverso clássico.
+- **STGUSDT** +24.74% 1D · EXP_BTC:1h=77.6 · FR=-0.001 (shorts pagando) · LSR_trend=+29.63. Pressão imediata.
+- **AIOUSDT** +29.76% 1D · EXP_BTC:1h=50.2 · OI_trend=+25.94 · LSR_trend=-9.35. Setup mais limpo — entrada institucional clássica.
+
+**Watchlist próxima sessão:** PARTIUSDT, MANTAUSDT (range_level:1h=5, estrutura mais limpa para SS).
+
+*ARIA_CONTEXT.md v1.4 · Forge é guardião · 10/06/2026 — nota crítica validade dados: CVD/klines Spot→Futuros corrigido em fde21af; teses T-01 a T-04 só válidas com trades pós-fix*

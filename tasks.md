@@ -61,6 +61,12 @@ _Atualizado: 10/06/2026 · v2.1_
 - [x] **Organização do projeto** — `assets/`, `aria/scripts/`, `docs/_arquivo/` criados; root limpo; logo path corrigido · `9b... (commit housekeeping)`
 - [x] **Blacklist zerada** — EPICUSDT/HOLOUSDT/JTOUSDT/NILUSDT/PARTIUSDT/PROVEUSDT removidos; gates dinâmicos substituem lista estática · `preferences.json`
 
+## ✅ EA-Sprint6 — Concluído (10/06/2026)
+
+- [x] **R-ARIA-03 · ema_trend:1h +5 pts no score** — discrimina pullback em tendência maior (4h/1h fortes, 5m fraco) de bear pleno; bônus não-bloqueante; evidência: snapshot eAssets 23:12 UTC mostra padrão 4h=+6/1h=+6/5m=0 (BEATUSDT) invisível ao score anterior · `src/market_view.py` L100 · autorização Doreto 10/06/2026 · commit `d089dce`
+
+> ⚠️ **Violação R-07 registrada:** commit `d089dce` foi executado pela ARIA (não pelo Forge). Código revisado pelo Forge e aprovado — nenhuma reversão necessária. Quarta violação no dia (anteriores: `d8b939d` ARIA, `315f0d6` Brain, `6f0bc0a` Forge paralelo). Ver R-07 em AGENTS.md.
+
 ## ✅ EA-Sprint5 — Concluído (09–10/06/2026)
 
 - [x] **eAssets backend refatorado** — 2 processos Flask → 1 FastAPI unificado (`server.py`); CRM/GRM/BTC Reset calculados pelos módulos Python reais · `aria/eAssets/server.py` · `a204403`
@@ -70,6 +76,260 @@ _Atualizado: 10/06/2026 · v2.1_
 - [x] **Análise eAssets 10/06 01:48 UTC** — top setups: JCTUSDT (EXP1h=74, LSR=-12), ZBTUSDT, AGTUSDT, BEATUSDT; BTWUSDT +20% já havia subido (LSR=+18, tarde demais)
 - [x] **gitignore brain repo corrigido** — `!aria/**` deixava passar .py/.html; novo padrão `!*/` + `!*.md` (apenas markdowns) · `abfd81d`
 - [x] **eAssets dashboard** — pausado; debug macro HTML pendente (baixa prioridade, DevTools necessário)
+
+## 🚨 BLOQUEIO CRÍTICO — Consenso Brain × ARIA × Forge (10/06/2026)
+
+> **Contexto:** Bot coletou apenas 2 trades. Forge diagnosticou dados internos do SS e concluiu erroneamente "mercado sem pressão". Doreto corrigiu: VELVETUSDT +95%, BEATUSDT +55%, AIOUSDT +25% — squeezes reais que o bot não capturou. O SS está cego a oportunidades que estão acontecendo.
+
+### Dados confirmados pelo Forge (logs SS)
+- **Score máximo atingido: 83** · threshold: 85 · 4.868 refusals por `score_below_threshold`
+- **liq_short_1m = 0 e liq_cascade = false em 100% dos signals** — mesmo com F-12 ativo
+- Esses dois campos valem **35 pts** do score → teto prático ~83 sem eles
+- Causa provável: threshold F-16 (`max(OI × 2%, $10k)`) alto demais para os ativos monitorados
+- Ghost signals: só HOMEUSDT e PARTIUSDT chegam perto do threshold — universo restrito
+
+### Questões abertas — requerem consenso antes de qualquer fix
+
+**Para ARIA (análise eAssets):**
+- [ ] **Case VELVETUSDT +95%, BEATUSDT +55%, AIOUSDT +25%** — analisar o que os snapshots eAssets mostravam ANTES desses movimentos. Quais indicadores estavam ativos? OI, LSR, EXP_BTC, ema_trend:4h? O SS teria visto esses setups?
+- [ ] Snapshot atual: quantos ativos têm OI+ · LSR- · EXP_BTC+ simultaneamente? Score teórico máximo dos melhores candidatos atinge 85?
+- [ ] O mercado está gerando condições de squeeze agora ou está em regime diferente?
+
+**Para Brain (decisão estratégica):**
+- [ ] **Como desbloquear o score?** Com liq_cascade/liq_short_1m sempre zero, teto é 83. Opções:
+  - A) Reduzir `min_score` para 80 (mais trades, sem confirmação real de liquidações)
+  - B) Redistribuir os 35 pts de liq para componentes funcionais (CVD, trades_1m, exp_btc)
+  - C) Manter 85 e corrigir o threshold do F-16 para capturar liquidações menores
+- [ ] **O DNA atual está alinhado com o mercado de hoje?** LSR trend positivo + CVD negativo dominam os refusals — isso é o mercado ou o SS olhando os dados errados?
+- [ ] **`min_oi_trend: 0.015` no preferences vs `0.008` do gate combo** — há duplicação de filtro?
+
+**Para Forge (aguardando consenso):**
+- [ ] Implementar decisão do Brain sobre o score após análise ARIA confirmar causa raiz
+
+### Achado técnico Forge — causa raiz ESTRUTURAL confirmada no código (10/06/2026)
+
+**O pipeline F-12 está ativo** — eventos chegando via `futures_multiplex_socket`. O problema são os thresholds do score calibrados para large caps:
+
+`market_view.py` L120-125 — score contributions de `liq_short_1m_stable`:
+- `> $100k` → +15 pts · `> $50k` → +10 pts · `> $10k` → +5 pts
+- **Abaixo de $10k = 0 pts** (piso absoluto)
+
+`metric_engine.py` L728 — `liq_cascade`:
+- `_liq_threshold = max(oi_usd * 0.02, 10_000)` — floor de $10k por minuto por símbolo
+
+**Eventos reais confirmados (DIAG F-12 09/06):** BTWUSDT $6.090 · VELVETUSDT $4.439 · STGUSDT $1.276 · TRUMPUSDT $438
+
+Conclusão: para 99%+ dos ativos small/mid cap, liq_short_1m nunca atinge $10k/min → **0 pts de liq** → score teto 83 → threshold 85 nunca atingido.
+
+**VELVET +95%, BEAT +55%, AIO +25%:** provavelmente tiveram eventos de liquidação reais abaixo de $10k/min por símbolo. O SS recebeu, acumulou, e descartou silenciosamente por threshold. Bot estava cego apesar de ter os dados.
+
+**Proposta técnica para consenso Brain × ARIA:** reduzir thresholds proporcionalmente ao OI do ativo — mesma lógica do F-16 mas também no score. ARIA confirmar: esses 3 casos tinham liq events? Qual notional?
+
+### Achado estrutural Forge — Radar Global é parcialmente cego (10/06/2026)
+
+**VELVET score 12/22 com exp:5m=0.0 enquanto subia +100% — causa raiz:**
+
+O SS declara "RADAR GLOBAL: 530+ símbolos" mas na prática:
+- Boot bootstrap de klines: apenas **top 50 por volume** (`data_engine.py` L247)
+- Ativos fora do top 50: precisam de ~2.5h de WebSocket para ter `exp:5m` válido (30 candles × 5min)
+- OI/LSR: top 100 prioritários + rotação esporádica dos demais — dados velhos para small alts
+- Critério de prioridade (`data_engine.py` L557): `top_100 OR exp:5m>0.01 OR score>=60`
+
+**O paradoxo estrutural:** para entrar na janela de dados o ativo precisa já ter dados → nunca aquece antes de explodir.
+
+**Resultado:** VELVET, BEAT, AIO — small/mid caps prestes a squeeze — ficam em modo "frio" com dados zerados. O SS os scanneia, gera score inválido (12/22), rejeita. +100% invisível.
+
+**Questão para consenso (Doreto + Brain + ARIA):**
+O SS foi projetado para surfar squeezes de ativos JÁ com volume alto (top 100). Ativos que ainda não explodiram são invisíveis por design. Isso é uma limitação arquitetural — não de parâmetro.
+
+Opções:
+- **A) Fix arquitetural** — expandir bootstrap + warm prioritário para qualquer ativo com OI crescente ou volume spike nas últimas 4h (requer dados do eAssets ou CMC como feed externo)
+- **B) Ajuste de escopo** — aceitar que o SS opera apenas em top 100 por volume e calibrar o DNA para esse universo (abrir mão de VELVET-type)
+- **C) Pivô** — se o alvo são small/mid caps, o SS precisa de redesign na camada de dados
+
+---
+
+## 🔴 Achado Forge — Bloqueios ativos pós Sprint 5 (10/06/2026 · 19:50 UTC)
+
+> **Contexto:** Bot reiniciado com todos os fixes de Sprint 5 ativos (d8b939d/315f0d6/6f0bc0a). Gatilho liberado às 19:50. Análise dos primeiros `signal_refusals.jsonl` confirmou dois bloqueios estruturais ainda ativos.
+
+### Bloqueio 1 — `lsr_trend_positive` bloqueia VELVET/BEAT antes do score
+
+**Evidência:** VELVETUSDT com $69k em `liq_short_1m_stable` acumulado no primeiro minuto pós-warmup **não aparece em `signal_refusals.jsonl`** — está sendo rejeitado pelo gate `lsr_trend_positive` antes de atingir o cálculo de score. DNA BLOCKER reporta `lsr_trend_positive: 45` bloqueios no mesmo período.
+
+**Implicação:** os ativos com maior liquidação ativa (exatamente os alvos do SS) são excluídos por LSR subindo — que é o comportamento esperado em demand breakouts (B-34). O gate foi projetado para squeezes clássicos (LSR caindo = shorts liquidados), mas cega o bot para o padrão oposto.
+
+**Questão para Brain:** o gate `lsr_trend_positive` deve ter um bypass quando `liq_short_1m_stable > $20k`? Ou criar path B-34 paralelo com score próprio? Evidência necessária: validar com 20+ trades se liq alta + LSR subindo → WR positivo.
+
+### Bloqueio 2 — `liq_cascade` threshold ainda alto para pequenos OIs
+
+**Evidência em tempo real (19:50 UTC):**
+- STGUSDT: `liq_short_1m=4,057`, `score=65` → liq pontuou +5 pts (threshold $1k ✅), mas score base ~60 + liq +5 = 65. Distância para 85: **20 pts**
+- `liq_cascade` condição: `liq_curr > liq_prev × 1.8 AND liq_curr > max(oi_usd × 0.02, $1k)`
+- Para STGUSDT com OI estimado ~$5M: floor `0.02 × $5M = $100k` → cascade nunca dispara com $4k
+
+**Implicação:** mesmo com floor baixado para $1k, o `0.02 × OI` domina para qualquer ativo com OI > $50k. `liq_cascade` (+20 pts) continua inacessível. Teto prático do score = 65-70 sem cascade.
+
+**Questão para Brain:** rever a fórmula `0.02 × OI` para ativos com OI < $5M? Alternativa: threshold fixo escalonado por tier de OI em vez de percentual.
+
+### Estado após Sprint 5
+- `liq_short_1m` scoring: **funcionando** ($1k/$5k/$20k → +5/+10/+15 pts)
+- `liq_cascade` (+20 pts): **bloqueado** por 0.02×OI alto demais
+- `lsr_trend_positive` gate: **bloqueia** os ativos com maior atividade de liquidação
+- Teto prático do score: **65-70** (sem cascade) vs threshold 85
+
+**Aguardando:** ~~decisão Brain sobre bypass B-34 e revisão do threshold liq_cascade~~ — **CONSENSO OBTIDO em 10/06/2026. Ver tasks B-34-bypass e B-liq-cascade-tiers abaixo.**
+
+---
+
+## 🟠 Brain → Forge — Demanda T-08 (11/06/2026)
+
+### B-ema4h-bypass-virada — Análise + bypass condicional do gate `ema_4h_bearish` na janela pós-virada
+
+**Autorizado por Doreto em 11/06/2026.**
+
+> ✅ **Passo 1 concluído:** logging enriquecido para refusals `ema_4h_bearish` · `signal_engine.py` · `4332d36` · push origin ✅ · aria ✅
+> Cada refusal agora loga: `ema_trend:4h`, `ema_trend:15m`, `ema_trend:1h`, `lsr_trend`, `lsr`, `exp_btc:1h`.
+> **Aguardando:** ~50 eventos pós-restart → Brain audita falso positivo rate → go/no-go para Passo 2.
+
+**Evidência (ARIA 00:58 UTC · 11/06):** 13 ativos com ema_trend:4h=-6 subiram >3% na janela 00:00–01:00 UTC (21h–22h BRT). Caso mais forte: ASTRUSDT +15.8% — ema_1h=0, ema_15m=+6, lsr_trend=-46.63, oi_trend=+109.49 — bloqueado pelo candle 4h anterior bearish, que não capturou o movimento atual. O gate está usando foto de 4h atrás para bloquear movimento em curso.
+
+**Passo 1 — Análise (Forge executa antes de qualquer mudança de código):**
+
+Rodar análise no `logs/signal_refusals.jsonl` filtrando:
+- `reason_code = "ema_4h_bearish"`
+- timestamp entre 00:00–02:00 UTC de qualquer dia disponível
+
+Para cada refusal nessa janela, extrair: `ema_trend_4h`, `ema_trend_1h` (se disponível), `lsr_trend`, `oi_trend`, `symbol`, `timestamp`.
+
+Responder: quantos desses refusals teriam passado no bypass proposto abaixo? Quantos teriam sido corretamente mantidos?
+
+**Bypass proposto (implementar SOMENTE se análise confirmar):**
+```python
+# bypass ema_4h_bearish quando TFs menores já confirmam reversão
+bypass = (
+    ema_trend_15m >= 4
+    and ema_trend_1h >= 0
+    and lsr_trend <= -15
+)
+```
+
+- ASTRUSDT-type (15m=+6, 1h=0, lsr=-46): bypass ativo ✅
+- HUSDT-type (15m=+4, 1h=-6): gate mantido ✅
+- SONICUSDT-type (15m=0, 1h=-6): gate mantido ✅
+
+**Passo 2 — Implementação (somente após análise confirmar):**
+- `src/signal_engine.py` — gate `ema_4h_bearish`: adicionar verificação de bypass antes do return None
+- Logar `reason_code = "ema_4h_bypass_virada"` quando bypass ativo (observacional)
+- Campo `ema4h_bypass_active: bool` no signal dict
+
+**Critério de go/no-go:** se análise mostrar que o bypass teria deixado passar principalmente perfis ASTRUSDT (1h ≥ 0 + 15m forte + lsr colapsando) e bloqueado HUSDT/SONIC (1h negativo) → implementar. Se falso positivo rate > 40% → revisar threshold antes de implementar.
+
+---
+
+## 🟠 Brain → Forge — Demanda T-07 (10/06/2026)
+
+### ✅ B-candle-age — Logar `last_4h_candle_age_minutes` no signal dict · `signal_engine.py` · `c30ebbf`
+
+**Autorizado por Doreto em 10/06/2026. Implementado pelo Forge em 10/06/2026. Push: origin ✅ · aria ✅**
+
+**Evidência (deliberação Brain × ARIA · 10/06/2026):** o SS combina dados tick-level (CVD, liq_cascade — latência <1s) com dados candle-level (ema_trend:4h — latência até 4h) no mesmo score sem rastrear a idade dos campos. O gate mais crítico (`ema_trend:4h`) é o mais lento. Um ativo pode ter virado de bearish para bullish dentro do candle 4h em formação e o SS só descobrirá no fechamento. Sem o campo de idade, não há como saber se esse lag está custando trades.
+
+**Implementação (Forge):**
+- Em `src/signal_engine.py`, no bloco de construção do signal dict (junto com `ema_trend_4h`): calcular quantos minutos passaram desde o timestamp do último candle 4h fechado até o momento da entrada.
+- Campo: `last_4h_candle_age_minutes: int` — valor esperado: 0 a 240.
+- Fonte: `metric_engine` já mantém o buffer de klines 4h — o timestamp do último kline fechado está disponível.
+- **Campo puramente observacional** — não altera nenhum gate, não muda comportamento do bot.
+- Incluir também nos ghost signals.
+
+**Critério de validação (T-07):** após 30+ trades, Brain cruza `last_4h_candle_age_minutes` × `exit_reason` × `mfe`. Se trades com candle 4h velho (>200min) tiverem WR sistematicamente pior → evidência para repensar o gate `ema_4h_bearish` ou adotar candle aberto no score. Se não houver correlação → hipótese descartada com dados.
+
+---
+
+## ✅ Fix crítico — klines + aggTrades para futures_multiplex_socket · `data_engine.py` · `fde21af`
+
+> Mesmo padrão do F-12 (liquidações) mas nos streams de klines e CVD. Spot aceitava conexão silenciosamente — dados "parecidos" mas do mercado errado. CVD e klines agora chegam do endpoint correto (fstream.binance.com). Push origin ✅ · aria ✅
+> **Impacto:** todos os trades anteriores ao restart têm CVD e klines calculados do Spot — dados históricos parcialmente invalidados para T-01/T-02/T-03. Ver nota abaixo.
+
+## ✅ Fix — queue overflow WebSocket · `data_engine.py` + `tools/binance_raw_listener.py` · `d44e89d` + `cd7c5b3`
+
+> `queue_size=10000` adicionado no `BinanceSocketManager` para evitar overflow silencioso em spikes de volume. Segundo commit corrigiu nomenclatura: `queue_size` → `max_queue_size` (parâmetro correto da biblioteca python-binance).
+
+## ✅ Ferramenta — `tools/binance_raw_listener.py` · `fde21af`
+
+> Listener WebSocket puro Binance Futures sem filtro. Captura aggTrade, kline_1m, markPrice, bookTicker e forceOrder por símbolo. Uso: `python tools/binance_raw_listener.py BTCUSDT VELVETUSDT`. Output em `tools/raw_logs/`. Criado para diagnóstico de dados brutos — inspecionar payload antes de qualquer processamento do SS.
+
+---
+
+## ✅ Brain → Forge — Demandas autorizadas por Doreto (10/06/2026)
+
+### B-score-ema1h — ema_trend:1h como bônus de score (+5 pts)
+
+**Autorizado por Doreto em 10/06/2026.**
+
+**Evidência (snapshot ARIA 23:12 UTC):** o SS não distingue entre ativo com 4h=+6/1h=+6/5m=0 (pullback em tendência forte) e ativo genuinamente bearish em todos os TFs. O 1h é o timeframe que mais discrimina esses dois regimes. Dados disponíveis no MetricStore desde F-10 (klines 1h no boot). Não é gate — não bloqueia entrada. É bônus que eleva ativos com momentum de médio prazo confirmado.
+
+**Implementação (Forge):**
+- Em `src/market_view.py`, função `calculate_fit_score()`: adicionar componente de bônus após os componentes existentes:
+  ```python
+  # ema_trend:1h bônus (autorizado Brain/Doreto 10/06/2026)
+  ema_1h = d.get("ema_trend:1h") or 0
+  if ema_1h >= 2:
+      score += 5
+  ```
+- Adicionar `ema_trend_1h` no signal dict (`src/signal_engine.py`) junto com `ema_trend_4h` — campo observacional para auditoria.
+- Logar nos ghost signals também.
+
+**Critério de validação:** após 30+ trades, Brain cruza `ema_trend_1h` × `mfe` × `exit_reason`. Se não houver correlação positiva (winners com ema_1h ≥ 2 não têm MFE maior), remover o bônus.
+
+---
+
+### ✅ B-34-bypass — Bypass gate `lsr_trend_positive` para Demand Breakout · `signal_engine.py L518` · `519b56d`
+
+**Autorizado por Doreto em 10/06/2026. Implementado pelo Forge em 10/06/2026.**
+
+**Evidência (logs SS 19:50 UTC):** VELVETUSDT com `liq_short_1m_stable = $69k` no primeiro minuto pós-warmup foi rejeitado pelo gate `lsr_trend_positive` antes de chegar ao score. DNA BLOCKER reportou `lsr_trend_positive: 45` bloqueios no mesmo período. O gate foi projetado para squeezes clássicos (LSR caindo), mas cega o bot para demand breakouts onde LSR sobe porque longs entram com força e shorts novos são imediatamente destruídos.
+
+**Implementação (Forge):**
+- Em `src/signal_engine.py`, no gate `lsr_trend_positive`: antes de retornar refusal, verificar condição de bypass:
+  - `liq_short_1m_stable > 20_000` **AND**
+  - `trades_1m >= 15` **AND**
+  - `cvd_change_pct > 2.0`
+- Se bypass ativo: **não bloquear** — deixar o signal seguir para score normalmente. Logar reason_code `lsr_bypass_demand_breakout` em observational log (não em refusals).
+- Adicionar campo `lsr_bypass_active: bool` no signal dict para auditoria futura.
+
+**Critério de validação:** após 20+ trades com `lsr_bypass_active = True`, Brain audita WR e MFE desse subset. Se WR < 50% → reverter bypass.
+
+---
+
+### ✅ B-liq-cascade-tiers — Tiers de OI para threshold do `liq_cascade` · `metric_engine.py L735` · `6154a7d`
+
+**Autorizado por Doreto em 10/06/2026. Implementado pelo Forge em 10/06/2026.**
+
+**Evidência (logs SS 19:50 UTC):** STGUSDT com `liq_short_1m = $4.057` e OI estimado ~$5M tem threshold atual `max(0.02 × $5M, $10k) = $100k`. Cascade jamais dispara com $4k/min — distância 25×. Os +20pts de `liq_cascade` são matematicamente inacessíveis para 99% dos ativos monitorados.
+
+**Implementação (Forge):**
+- Em `src/metric_engine.py`, na função que calcula `_liq_threshold` (atualmente L728):
+
+```python
+# ANTES
+_liq_threshold = max(oi_usd * 0.02, 10_000)
+
+# DEPOIS — tiers por OI (autorizado Brain/Doreto 10/06/2026)
+if oi_usd < 1_000_000:
+    _liq_threshold = 500
+elif oi_usd < 10_000_000:
+    _liq_threshold = 2_000
+else:
+    _liq_threshold = 10_000
+```
+
+- Condição de aceleração `liq_curr > liq_prev × 1.8` **mantida** — não remover.
+- Logar `liq_threshold_used` nos events de `liq_cascade = True` para auditoria.
+
+**Critério de validação:** verificar em `signal_refusals.jsonl` que `liq_cascade = True` começa a aparecer nos signals. Auditar primeiros 10 trades com cascade ativo para confirmar qualidade (MFE > 0 na maioria).
+
+---
 
 ## 🔴 Sprint 5 — Em andamento (objetivo: 50+ trades válidos)
 
@@ -132,6 +392,14 @@ _Atualizado: 10/06/2026 · v2.1_
 
 O Brain rodou análise de discriminação com 40 trades (ver `reports/analise-score-03-06-2026.md`).  
 Próximo run após 50+ trades com `rsi_5m` e `ob_imbalance` agora exportados no signal dict.
+
+---
+
+---
+
+## ⚠️ Nota de protocolo — 10/06/2026
+
+ARIA implementou diretamente o commit `d8b939d` (fix T-1) sem passar por Brain → tasks.md → Forge. O código foi revisado pelo Forge e está correto — aprovado para produção. Mas o fluxo correto é: ARIA entrega achados ao Brain, Brain escreve em tasks.md, Forge implementa. Regra R-06 do AGENTS.md. Não repetir.
 
 ---
 

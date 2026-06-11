@@ -818,6 +818,28 @@ Não é dado corrompido nem buffer insuficiente — é limitação do cálculo s
 
 ---
 
+### 🔧 Sprint Forge — 10/06/2026 (bug simétrico F-12 + queue overflow + listener raw)
+
+**fix(data): klines e aggTrades para futures_multiplex_socket** · commit `fde21af`
+
+Bug simétrico ao F-12: `_listen_klines` e `_listen_agg_trades` usavam `multiplex_socket` (Spot) em vez de `futures_multiplex_socket` (Futuros). CVD e klines de **todos os trades anteriores** ao restart desta sessão foram calculados com dados do mercado Spot — inválidos para análise de Futuros. Teses T-01 a T-04 só podem ser validadas com trades coletados a partir desta correção.
+
+Arquivo: `src/data_engine.py` — 2 linhas (L401 e L508).
+
+**feat(tools): `tools/binance_raw_listener.py`** · mesmo commit `fde21af`
+
+Listener WebSocket puro Binance Futures sem filtro. Captura por símbolo: `@aggTrade`, `@kline_1m`, `@markPrice`, `@bookTicker`. Stream global: `!forceOrder@arr`. Output: `tools/raw_logs/raw_YYYYMMDD_HHMMSS.jsonl`. Uso: `python tools/binance_raw_listener.py BTCUSDT VELVETUSDT STGUSDT`.
+
+**fix(ws): `queue_size=10000` no BinanceSocketManager** · commit `d44e89d`
+
+Overflow silencioso em spikes de volume — fila padrão insuficiente.
+
+**fix(ws): `queue_size` → `max_queue_size`** · commit `cd7c5b3`
+
+Nome correto do parâmetro na biblioteca `python-binance`. Fix de nomenclatura aplicado em `data_engine.py` e `tools/binance_raw_listener.py`.
+
+---
+
 ### 🔧 Sprint Forge — 09/06/2026 (fix F-12 causa raiz)
 
 **fix(F-12) — causa raiz definitiva do `liq_short_1m = 0`** · commit `ed54d36`
@@ -905,9 +927,41 @@ KATUSDT EXP_BTC:1h=40.09 → +17.93% em 15min pós-saída. Trailing 75% capturou
 
 ---
 
-*Documento gerado em: 03/06/2026*
-*Última atualização: 09/06/2026*
-*Versão: 4.5 · Última atualização: 09/06/2026*
+---
+
+## 🔧 Sprint 10/06/2026 — Sessão Forge + Brain + ARIA (v4.6)
+
+### Diagnóstico de bloqueio (Forge)
+
+Score máximo observado: **83**. Threshold: 85. Causa raiz dupla:
+1. **lsr_trend_positive** gate cegava VELVETUSDT ($69k liq) antes do score — padrão demand breakout não reconhecido
+2. **liq_cascade** (+20 pts) inacessível: `0.02×OI` floor dominante ($5M OI → floor $100k vs liq real $4k)
+
+### Fixes implementados (todos com autorização Doreto)
+
+| Fix | Commit | Impacto |
+|-----|--------|---------|
+| B-liq-cascade-tiers | `6154a7d` | OI-based tiers: <$1M→$500 / $1M-$10M→$2k / >$10M→$10k |
+| B-34-bypass | `519b56d` | Bypass lsr_trend_positive quando liq>$20k + trades≥15 + cvd>2.0 |
+| ema_trend:1h +5 pts bônus | `d089dce` | Discrimina pullback em tendência maior de bear pleno |
+| AGENTS.md variante R-07 | `5f79921` | Brain/ARIA podem entregar diff pronto; Forge commita |
+
+> ⚠️ `d089dce` foi commitado pela ARIA (violação R-07 #4). Código revisado e aprovado pelo Forge. Registrado em tasks.md.
+
+### Análise ARIA — snapshot eAssets 10/06 23:12 UTC
+
+Macro bearish: 79.1% dos 531 ativos com EMA:4h negativo. Apenas 28 ilhas de desacoplamento — universo exato do SS. Teses novas:
+- **T-05**: range_level:1h ≥ 4 + EMA:4h ≥ 0 + EXP_BTC:1h > 5 → MFE médio 1.5× maior (campo não no pipeline SS — backlog)
+- **T-06**: FR > +0.001 em ativo forte = catalisador de squeeze. `funding_rate` já no signal dict — ARIA pode auditar agora
+
+### Estado ao final da sessão
+
+- Bot aguardando restart para carregar os 3 fixes (`6154a7d`, `519b56d`, `d089dce`)
+- Sem trades ainda (hard reset manual executado por Doreto — logs limpos, state preservado)
+- Warmup concluído às 20:28:41 — bot ativo
+- MDs todos atualizados, commits prontos para push
+
+*Versão: 4.7 · Última atualização: 10/06/2026*
 
 ---
 
@@ -1117,11 +1171,3 @@ CRM, GRM e BTC Reset agora calculados de verdade pelos módulos Python (`scripts
 Yahoo Finance: `allorigins.win` removido — servidor busca direto (sem CORS).
 **Pendente (baixa prioridade):** seção macro do dashboard HTML não popula no browser — debug via DevTools pendente.
 ARIA ciente do estado técnico (ARIA_CONTEXT.md v1.2 seção 6).
-
-### Acesso remoto via Tailscale — 10/06/2026
-
-Dashboard acessível pelo celular via Tailscale.
-- `preferences.json → dashboard.host: "0.0.0.0"` · commit `e89f676`
-- Firewall Windows: porta 8765 aberta (regra "SqueezeSniper Dashboard Tailscale")
-- IP Tailscale do laptop: `100.71.78.107`
-- URL celular: `http://100.71.78.107:8765` (Tailscale ativo no celular)
