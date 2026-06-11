@@ -1,5 +1,54 @@
 # Tasks — Fila Brain → Forge
-_Atualizado: 11/06/2026 · v2.3_
+_Atualizado: 11/06/2026 · v2.5_
+
+---
+
+## 📌 Nota de Protocolo — Restart e Reset Paper (Doreto · 11/06/2026)
+
+> **Para Brain e ARIA — ler antes de qualquer recomendação de restart:**
+
+**Soft Restart** (padrão recomendado — usar na grande maioria dos casos):
+- `Ctrl+C` → `python main.py`
+- **Não deletar nenhum arquivo de logs**
+- `metric_state.json` preservado → klines 4h carregam quente, sem 2.5h de cegueira
+- Trades em `paper_closed.jsonl` permanecem válidos para análise
+
+**Hard Reset Paper** (só quando há corrupção de estado ou início de fase de calibração nova):
+- Deletar: `risk_state.json` · `paper_opportunities.json` · `throttle_state.json`
+- **NÃO deletar:** `metric_state.json` · `paper_closed.jsonl` · `signals.jsonl`
+- Justificativa obrigatória antes de recomendar ao Doreto
+
+**Regra:** Brain e ARIA não recomendam Hard Reset sem evidência de corrupção de estado ou autorização explícita de Doreto. Soft Restart resolve 95% dos casos.
+
+---
+
+## ✅ Brain → Forge — D1 (11/06/2026) · `funding_rate` no signal dict real · `signal_engine.py` L954
+
+**Autorizado por Doreto em 11/06/2026. Variante R-07 (1 linha, escopo único). Implementado pelo Forge.**
+
+**Evidência (ARIA · 11/06/2026):** `funding_rate` calculado em `signal_engine.py:695` não estava incluído no dicionário retornado por `analyze()` (bloco L930–954). Presente nos ghost signals (fix T-09 · `4ffd73f`) e nos refusal logs (L1009), mas ausente em `signals.jsonl` e `paper_closed.jsonl`. Tese T-06 (FR como catalisador de squeeze) inauditável nos trades reais. Nota incorreta em tasks.md anterior ("já estava no signal dict real") — L1009 é bloco de refusal, não retorno do signal.
+
+**Diff (variante R-07):**
+```python
+# signal_engine.py — bloco do signal dict (~L953), após lsr_bypass_active
+"funding_rate": d.get("funding_rate") or 0.0,
+```
+
+**Critério de validação:** `funding_rate` com valores ≠ 0 em `signals.jsonl` após próximo restart.
+
+---
+
+## 🟠 Brain → Forge — D2 (11/06/2026) · Diagnóstico partial TP breakeven · `paper_tracker.py` ~L1063
+
+**Autorizado por Doreto em 11/06/2026. Diagnóstico antes de qualquer fix na lógica.**
+
+**Evidência (ARIA · 11/06/2026):** 3 trades com MFE > 3.4% (threshold = `tp_pct × 100 × 0.85 = 4.0 × 0.85 = 3.4%`) tiveram `breakeven_partial_closed = False`: CATIUSDT (MFE 4.64%), CATIUSDT (MFE 4.08%), PORTALUSDT (MFE 3.94%). `paper_debug.jsonl` confirma zero eventos `partial_breakeven_triggered`. A condição `breakeven_reached and not breakeven_sl_moved and current_sl < breakeven_sl` deveria ter disparado mas não disparou. Causa raiz não identificável só pelo código.
+
+**Implementação (Forge):** Adicionar log `DEBUG` antes do bloco `if breakeven_reached` capturando por tick: `pnl_pct`, `breakeven_threshold_pct`, `breakeven_reached`, `breakeven_sl_moved`, `current_sl`, `breakeven_sl`.
+
+**Critério de go/no-go:** após próximo lote de trades com MFE > 3.4%, ler logs e identificar qual condição falha → fix cirúrgico na lógica ou no cálculo do threshold.
+
+---
 
 ---
 
@@ -66,6 +115,8 @@ _Atualizado: 11/06/2026 · v2.3_
 - [x] **R-ARIA-03 · ema_trend:1h +5 pts no score** — discrimina pullback em tendência maior (4h/1h fortes, 5m fraco) de bear pleno; bônus não-bloqueante; evidência: snapshot eAssets 23:12 UTC mostra padrão 4h=+6/1h=+6/5m=0 (BEATUSDT) invisível ao score anterior · `src/market_view.py` L100 · autorização Doreto 10/06/2026 · commit `d089dce`
 
 > ⚠️ **Violação R-07 registrada:** commit `d089dce` foi executado pela ARIA (não pelo Forge). Código revisado pelo Forge e aprovado — nenhuma reversão necessária. Quarta violação no dia (anteriores: `d8b939d` ARIA, `315f0d6` Brain, `6f0bc0a` Forge paralelo). Ver R-07 em AGENTS.md.
+
+> ⚠️ **Violação R-07 registrada (5ª):** commit `3616b1b` executado pelo Brain em 11/06/2026. Mudanças: `funding_rate` no signal dict real (`signal_engine.py:952`) + log DEBUG breakeven (`paper_tracker.py:1063`). Código revisado pelo Forge e aprovado — ambas as mudanças são cirúrgicas e corretas, nenhuma reversão necessária. Brain deve usar a Variante R-07 (diff em tasks.md) e aguardar o Forge commitar.
 
 ## ✅ EA-Sprint5 — Concluído (09–10/06/2026)
 
@@ -306,9 +357,11 @@ bypass = (
 
 ## ✅ Brain → Forge — Demandas autorizadas por Doreto (10/06/2026)
 
-### B-score-ema1h — ema_trend:1h como bônus de score (+5 pts)
+### ✅ B-score-ema1h — ema_trend:1h no signal dict (ghost + sinal real) · `signal_engine.py` L257/L944 · `90d3e3b`
 
-**Autorizado por Doreto em 10/06/2026.**
+**Autorizado por Doreto em 10/06/2026. Implementado pelo Forge em 11/06/2026.**
+
+> Bônus +5 pts em `market_view.py:102` (commit `d089dce`) já existia. Gap era no signal dict: campo não exportado para `signals.jsonl` nem `ghost_signals.jsonl`. Fix: 1 linha adicionada em cada bloco de construção do dict. Brain pode agora auditar `ema_trend_1h` × MFE após 30+ trades.
 
 **Evidência (snapshot ARIA 23:12 UTC):** o SS não distingue entre ativo com 4h=+6/1h=+6/5m=0 (pullback em tendência forte) e ativo genuinamente bearish em todos os TFs. O 1h é o timeframe que mais discrimina esses dois regimes. Dados disponíveis no MetricStore desde F-10 (klines 1h no boot). Não é gate — não bloqueia entrada. É bônus que eleva ativos com momentum de médio prazo confirmado.
 
